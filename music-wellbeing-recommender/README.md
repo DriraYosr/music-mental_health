@@ -7,6 +7,14 @@
 [![Machine Learning](https://img.shields.io/badge/ML-Scikit--Learn-orange.svg)](https://scikit-learn.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+## 🚀 Live Demo
+
+**Try the app:** [https://music-mentalhealth-vsmz2luqxtuoeagqluwpmu.streamlit.app/](https://music-mentalhealth-vsmz2luqxtuoeagqluwpmu.streamlit.app/)
+
+> Get personalized music recommendations optimized for your mental health goals!
+
+---
+
 ## 🎯 Project Overview
 
 This project leverages machine learning and data science techniques to create personalized music recommendations that can positively impact users' mental wellbeing. By analyzing music listening patterns and their correlation with mental health indicators, we build recommendation models that suggest music genres and tracks tailored to individual needs.
