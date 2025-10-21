@@ -1,8 +1,6 @@
 """
-Streamlit Web Application for Music Wellbeing Recommender
-
-This interactive web app allows users to get personalized music recommendations
-based on their mental health indicators and preferences.
+Enhanced Streamlit Web Application for Music Wellbeing Recommender
+Integrates the trained RandomForest model for real recommendations
 """
 
 import streamlit as st
@@ -11,18 +9,13 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import joblib
 import sys
 import os
+from typing import Dict, Union, List
 
 # Add src directory to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
-
-try:
-    from recommend import MusicRecommendationEngine, create_recommendation_engine
-    from utils import create_user_profile, validate_user_input, format_recommendations_for_display, get_success_stories
-    from modeling import MoodPredictionModel, GenreClassifier
-except ImportError:
-    st.error("⚠️ Unable to import recommendation modules. Running in demo mode.")
 
 # Page configuration
 st.set_page_config(
@@ -67,88 +60,250 @@ st.markdown("""
         border-left: 4px solid #FF9800;
         margin: 1rem 0;
     }
+    .metric-card {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def initialize_session_state():
-    """Initialize session state variables."""
-    if 'recommendations' not in st.session_state:
-        st.session_state.recommendations = None
-    if 'user_profile' not in st.session_state:
-        st.session_state.user_profile = None
-    if 'recommendation_engine' not in st.session_state:
-        st.session_state.recommendation_engine = None
+@st.cache_resource
+def load_model_artifacts():
+    """Load the trained model and related artifacts."""
+    try:
+        model_path = os.path.join(os.path.dirname(__file__), '../models/music_effect_model.pkl')
+        encoder_path = os.path.join(os.path.dirname(__file__), '../models/label_encoder.pkl')
+        features_path = os.path.join(os.path.dirname(__file__), '../models/feature_columns.pkl')
+        
+        model = joblib.load(model_path)
+        label_encoder = joblib.load(encoder_path)
+        feature_columns = joblib.load(features_path)
+        
+        return {
+            'model': model,
+            'label_encoder': label_encoder,
+            'feature_columns': feature_columns,
+            'loaded': True
+        }
+    except Exception as e:
+        st.error(f"❌ Error loading model: {e}")
+        return {'loaded': False}
 
-def create_demo_recommendation_engine():
-    """Create a demo recommendation engine for when models aren't available."""
-    class DemoEngine:
-        def get_recommendations(self, user_profile, num_recommendations=5):
-            # Generate demo recommendations based on user profile
-            primary_concern = user_profile.get('primary_concern', 'general_wellbeing')
-            
-            # Demo genre recommendations based on concern
-            if 'anxiety' in primary_concern:
-                genres = ['Ambient', 'Classical', 'New Age', 'Lo-fi Hip Hop', 'Meditation Music']
-                confidences = [0.92, 0.87, 0.84, 0.79, 0.74]
-            elif 'depression' in primary_concern:
-                genres = ['Jazz', 'Folk', 'Classical', 'World Music', 'Indie Rock']
-                confidences = [0.89, 0.85, 0.82, 0.77, 0.71]
-            elif 'insomnia' in primary_concern:
-                genres = ['Sleep Music', 'Ambient', 'Classical Piano', 'Nature Sounds', 'Drone']
-                confidences = [0.95, 0.90, 0.86, 0.81, 0.75]
-            elif 'ocd' in primary_concern:
-                genres = ['Minimalist', 'Classical', 'Ambient', 'Meditation Music', 'Binaural Beats']
-                confidences = [0.91, 0.87, 0.83, 0.78, 0.72]
-            else:
-                genres = ['Jazz', 'Classical', 'Folk', 'Ambient', 'World Music']
-                confidences = [0.85, 0.82, 0.79, 0.75, 0.70]
-            
-            # Create genre recommendations dataframe
-            genre_recs = pd.DataFrame({
-                'user_index': [0] * len(genres),
-                'rank': range(1, len(genres) + 1),
-                'genre': genres,
-                'confidence': confidences
-            })
-            
-            # Create track recommendations
-            track_recs = []
-            for i, (genre, conf) in enumerate(zip(genres, confidences)):
-                track_recs.append({
-                    'genre': genre,
-                    'track_name': f"Relaxing {genre} Track {i+1}",
-                    'artist': f"{genre} Collective",
-                    'confidence': conf,
-                    'expected_mood_improvement': conf * 3.5
-                })
-            
-            # Expected mood improvements
-            mood_improvements = {genre: conf * 4 for genre, conf in zip(genres, confidences)}
-            mood_improvements['overall'] = np.mean(confidences) * 3.8
-            
-            # Generate explanations
-            explanations = {}
-            for genre in genres:
-                if genre == 'Ambient':
-                    explanations[genre] = "Ambient music's minimal structure and gentle soundscapes help reduce mental stimulation, making it ideal for anxiety relief and relaxation."
-                elif genre == 'Classical':
-                    explanations[genre] = "Classical music's mathematical structure and moderate tempo have been scientifically shown to reduce cortisol levels and promote cognitive function."
-                elif genre == 'Jazz':
-                    explanations[genre] = "Jazz music's complex harmonies and improvisational elements can provide emotional stimulation while maintaining a soothing rhythm."
-                elif genre == 'Sleep Music':
-                    explanations[genre] = "Specifically designed with slow tempos (40-60 BPM) and minimal percussion to synchronize with natural sleep rhythms."
-                else:
-                    explanations[genre] = f"{genre} music has shown positive therapeutic effects for mood regulation and stress reduction."
-            
-            return {
-                'genre_recommendations': genre_recs,
-                'track_recommendations': track_recs,
-                'expected_mood_improvement': mood_improvements,
-                'explanations': explanations,
-                'user_profile': user_profile
-            }
+def recommend_music_genres(
+    user_profile: Dict[str, Union[int, float, bool]], 
+    target_to_improve: str,
+    model_artifacts: dict,
+    top_n: int = 5,
+    use_target_optimization: bool = True
+) -> pd.DataFrame:
+    """
+    Recommend music genres using target-optimized algorithm for better personalization.
+    """
+    if not model_artifacts['loaded']:
+        return pd.DataFrame()
     
-    return DemoEngine()
+    model = model_artifacts['model']
+    label_encoder = model_artifacts['label_encoder']
+    feature_columns = model_artifacts['feature_columns']
+    
+    if use_target_optimization:
+        return target_optimized_recommend(
+            user_profile=user_profile,
+            target_to_improve=target_to_improve,
+            model=model,
+            feature_columns=feature_columns,
+            label_encoder=label_encoder,
+            top_n=top_n
+        )
+    else:
+        # Fallback to standard recommendation if needed
+        return standard_recommend(
+            user_profile=user_profile,
+            target_to_improve=target_to_improve,
+            model=model,
+            feature_columns=feature_columns,
+            label_encoder=label_encoder,  
+            top_n=top_n
+        )
+
+def target_optimized_recommend(
+    user_profile: Dict[str, Union[int, float, bool]], 
+    target_to_improve: str,
+    model, 
+    feature_columns: List[str],
+    label_encoder,
+    top_n: int = 5
+) -> pd.DataFrame:
+    """
+    Enhanced recommendation system that optimizes specifically for the target condition.
+    
+    This version:
+    1. Simulates different improvement scenarios for the target condition
+    2. Tests how each genre affects the likelihood of improvement when the target is reduced
+    3. Measures the 'therapeutic potential' of each genre for the specific condition
+    4. Provides target-specific optimization rather than general music effects
+    """
+    
+    # Validate target
+    if target_to_improve not in user_profile:
+        return pd.DataFrame()
+    
+    current_target_level = user_profile[target_to_improve]
+    
+    # Extract available genres
+    genre_features = [col for col in feature_columns if col.startswith('Fav genre_')]
+    available_genres = [genre.replace('Fav genre_', '') for genre in genre_features]
+    
+    if not available_genres:
+        return pd.DataFrame()
+    
+    recommendations = []
+    
+    # Baseline: Current state prediction
+    baseline_profile = pd.Series(user_profile).reindex(feature_columns, fill_value=False)
+    for col in baseline_profile.index:
+        if isinstance(baseline_profile[col], (bool, np.bool_)):
+            baseline_profile[col] = int(baseline_profile[col])
+        elif pd.isna(baseline_profile[col]):
+            baseline_profile[col] = 0
+    
+    baseline_probs = model.predict_proba(baseline_profile.values.reshape(1, -1))[0]
+    baseline_improve_prob = baseline_probs[np.where(label_encoder.classes_ == 'Improve')[0][0]]
+    
+    # Test each genre with target condition improvement simulation
+    for genre in available_genres:
+        genre_scores = []
+        
+        # Test multiple improvement scenarios
+        improvement_levels = [0.1, 0.2, 0.3, 0.4, 0.5]  # Reduce target by 10%-50%
+        
+        for improvement_factor in improvement_levels:
+            # Create improved profile (reduce target condition)
+            improved_profile = pd.Series(user_profile).copy()
+            
+            # Simulate improvement in target condition
+            original_level = improved_profile[target_to_improve]
+            improved_level = max(0, original_level * (1 - improvement_factor))
+            improved_profile[target_to_improve] = improved_level
+            
+            # Set genre preference
+            for genre_feature in genre_features:
+                improved_profile[genre_feature] = False
+            improved_profile[f'Fav genre_{genre}'] = True
+            
+            # Prepare for prediction
+            test_profile = improved_profile.reindex(feature_columns, fill_value=False)
+            for col in test_profile.index:
+                if isinstance(test_profile[col], (bool, np.bool_)):
+                    test_profile[col] = int(test_profile[col])
+                elif pd.isna(test_profile[col]):
+                    test_profile[col] = 0
+            
+            # Get prediction
+            probs = model.predict_proba(test_profile.values.reshape(1, -1))[0]
+            improve_prob = probs[np.where(label_encoder.classes_ == 'Improve')[0][0]]
+            
+            # Calculate improvement potential (difference from baseline)
+            improvement_potential = improve_prob - baseline_improve_prob
+            genre_scores.append({
+                'improvement_factor': improvement_factor,
+                'target_level': improved_level,
+                'improve_prob': improve_prob,
+                'improvement_potential': improvement_potential
+            })
+        
+        # Calculate average improvement potential across scenarios
+        avg_improvement_potential = np.mean([score['improvement_potential'] for score in genre_scores])
+        max_improvement_potential = max([score['improvement_potential'] for score in genre_scores])
+        
+        # Calculate target-specific therapeutic score
+        therapeutic_score = (avg_improvement_potential + max_improvement_potential) / 2
+        
+        recommendations.append({
+            'Genre': genre,
+            'Improvement_Probability': baseline_improve_prob + therapeutic_score,
+            'Improvement_Percentage': (baseline_improve_prob + therapeutic_score) * 100,
+            'Therapeutic_Score': therapeutic_score,
+            'Predicted_Effect': 'Improve' if therapeutic_score > 0 else 'No effect',
+            'Target_Optimized': target_to_improve
+        })
+    
+    # Convert to DataFrame and sort by therapeutic score
+    recommendations_df = pd.DataFrame(recommendations)
+    if recommendations_df.empty:
+        return pd.DataFrame()
+    
+    recommendations_df = recommendations_df.sort_values('Therapeutic_Score', ascending=False)
+    return recommendations_df.head(top_n)
+
+def standard_recommend(
+    user_profile: Dict[str, Union[int, float, bool]], 
+    target_to_improve: str,
+    model, 
+    feature_columns: List[str],
+    label_encoder,
+    top_n: int = 5
+) -> pd.DataFrame:
+    """
+    Standard recommendation system (fallback method).
+    """
+    # Extract available genres
+    genre_features = [col for col in feature_columns if col.startswith('Fav genre_')]
+    available_genres = [genre.replace('Fav genre_', '') for genre in genre_features]
+    
+    if not available_genres:
+        return pd.DataFrame()
+    
+    # Create base profile
+    base_profile = pd.Series(user_profile)
+    recommendations = []
+    
+    # Test each genre
+    for genre in available_genres:
+        test_profile = base_profile.copy()
+        
+        # Reset all genre flags
+        for genre_feature in genre_features:
+            test_profile[genre_feature] = False
+        
+        # Set current genre
+        test_profile[f'Fav genre_{genre}'] = True
+        
+        # Reindex and prepare for prediction
+        test_profile = test_profile.reindex(feature_columns, fill_value=False)
+        
+        # Fixed type conversion - handle boolean and NaN values properly
+        for col in test_profile.index:
+            if isinstance(test_profile[col], (bool, np.bool_)):
+                test_profile[col] = int(test_profile[col])
+            elif pd.isna(test_profile[col]):
+                test_profile[col] = 0
+        
+        # Get prediction
+        test_array = test_profile.values.reshape(1, -1)
+        probabilities = model.predict_proba(test_array)[0]
+        
+        # Find "Improve" probability
+        improve_idx = np.where(label_encoder.classes_ == 'Improve')[0]
+        if len(improve_idx) > 0:
+            improve_prob = probabilities[improve_idx[0]]
+            recommendations.append({
+                'Genre': genre,
+                'Improvement_Probability': improve_prob,
+                'Improvement_Percentage': improve_prob * 100,
+                'Predicted_Effect': label_encoder.classes_[np.argmax(probabilities)]
+            })
+    
+    # Convert to DataFrame and sort
+    recommendations_df = pd.DataFrame(recommendations)
+    if recommendations_df.empty:
+        return pd.DataFrame()
+    
+    recommendations_df = recommendations_df.sort_values('Improvement_Probability', ascending=False)
+    return recommendations_df.head(top_n)
 
 def display_header():
     """Display the main header and introduction."""
@@ -156,114 +311,245 @@ def display_header():
     
     st.markdown("""
     <div class="info-box">
-        <strong>🎯 Personalized Music for Mental Wellbeing</strong><br>
-        Get science-based music recommendations tailored to your mental health needs. 
-        Our AI system analyzes your anxiety, depression, insomnia, and OCD levels to suggest 
-        music that can help improve your mood and overall wellbeing.
+        <strong>🎯 AI-Powered Music Recommendations for Mental Wellbeing</strong><br>
+        Get personalized music genre recommendations based on your mental health profile. 
+        Our machine learning model analyzes your anxiety, depression, insomnia, and OCD levels 
+        to suggest music genres that are most likely to improve your wellbeing.
     </div>
     """, unsafe_allow_html=True)
 
-def user_input_sidebar():
-    """Create sidebar for user inputs."""
-    st.sidebar.header("🧠 Your Mental Health Profile")
+def get_user_input():
+    """Get user input from the sidebar."""
+    st.sidebar.header("🧠 Your Profile")
     
     with st.sidebar:
-        st.markdown("### Personal Information")
-        age = st.slider("Age", 18, 80, 30)
-        gender = st.selectbox("Gender", ["Female", "Male", "Non-binary", "Prefer not to say"])
-        occupation = st.selectbox("Occupation", [
-            "Student", "Engineer", "Designer", "Manager", "Teacher", 
-            "Artist", "Developer", "Nurse", "Doctor", "Other"
+        st.markdown("### 👤 Personal Information")
+        age = st.slider("Age", 18, 80, 25, help="Your current age")
+        hours_per_day = st.slider("Daily Music Listening (hours)", 0.0, 12.0, 3.0, 0.5,
+                                help="How many hours do you listen to music per day?")
+        
+        st.markdown("### 🧠 Mental Health Indicators")
+        st.caption("Rate each on a scale of 0-10 (0=None, 10=Severe)")
+        
+        anxiety = st.slider("😰 Anxiety Level", 0, 10, 5,
+                           help="How would you rate your current anxiety level?")
+        depression = st.slider("😔 Depression Level", 0, 10, 5,
+                              help="How would you rate your current depression level?")
+        insomnia = st.slider("😴 Insomnia Level", 0, 10, 5,
+                            help="How severe are your sleep difficulties?")
+        ocd = st.slider("🔄 OCD Level", 0, 10, 5,
+                       help="How would you rate your OCD symptoms?")
+        
+        st.markdown("### 🎵 Music Preferences")
+        bpm = st.slider("Preferred BPM (Beats Per Minute)", 40, 200, 120,
+                       help="What tempo do you prefer? (60-90: Slow, 90-120: Moderate, 120+: Fast)")
+        
+        primary_streaming = st.selectbox("Primary Streaming Service", [
+            "Spotify", "Apple Music", "YouTube Music", "Amazon Music", 
+            "Pandora", "Deezer", "SoundCloud", "Other"
         ])
         
-        st.markdown("### Mental Health Indicators")
-        st.caption("Rate each on a scale of 1-10 (1=Very Low, 10=Very High)")
+        st.markdown("### 🎧 Listening Habits")
+        while_working = st.selectbox("Do you listen to music while working?", ["Yes", "No"])
+        instrumentalist = st.selectbox("Do you play any musical instruments?", ["No", "Yes"])
+        composer = st.selectbox("Do you compose music?", ["No", "Yes"])
+        exploratory = st.selectbox("Do you actively explore new music?", ["Yes", "No"])
+        foreign_languages = st.selectbox("Do you listen to music in foreign languages?", ["Yes", "No"])
         
-        anxiety_level = st.slider("😰 Anxiety Level", 1, 10, 5)
-        depression_level = st.slider("😔 Depression Level", 1, 10, 5)
-        insomnia_level = st.slider("😴 Insomnia Level", 1, 10, 5)
-        ocd_level = st.slider("🔄 OCD Level", 1, 10, 5)
-        
-        st.markdown("### Current Context")
-        current_mood = st.slider("Current Mood (1=Very Low, 7=Very High)", 1, 7, 4)
-        time_of_day = st.selectbox("Time of Day", ["Morning", "Afternoon", "Evening", "Night"])
-        
-        st.markdown("### Music Preferences (Optional)")
-        with st.expander("Advanced Music Settings"):
-            preferred_tempo = st.slider("Preferred Tempo (BPM)", 40, 180, 100)
-            preferred_energy = st.slider("Energy Level (0=Calm, 1=Energetic)", 0.0, 1.0, 0.5)
-            preferred_valence = st.slider("Positivity (0=Sad, 1=Happy)", 0.0, 1.0, 0.5)
-            preferred_acousticness = st.slider("Acoustic vs Electronic", 0.0, 1.0, 0.5)
-            preferred_danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
-        
-        # Create user profile
-        music_preferences = {
-            'preferred_tempo': preferred_tempo,
-            'preferred_energy': preferred_energy,
-            'preferred_valence': preferred_valence,
-            'preferred_acousticness': preferred_acousticness,
-            'preferred_danceability': preferred_danceability
-        }
-        
-        user_profile = create_user_profile(
-            age=age, gender=gender, occupation=occupation,
-            anxiety_level=anxiety_level, depression_level=depression_level,
-            insomnia_level=insomnia_level, ocd_level=ocd_level,
-            current_mood=current_mood, time_of_day=time_of_day,
-            music_preferences=music_preferences
+        # Target to improve
+        st.markdown("### 🎯 Primary Focus")
+        target_to_improve = st.selectbox(
+            "Which mental health aspect would you most like to improve?",
+            ["Anxiety", "Depression", "Insomnia", "OCD"],
+            help="Select your primary concern for personalized recommendations"
         )
         
-        # Get recommendations button
-        if st.button("🎵 Get My Recommendations", type="primary"):
-            is_valid, errors = validate_user_input(user_profile)
-            
-            if is_valid:
-                with st.spinner("🎼 Analyzing your profile and generating recommendations..."):
-                    if st.session_state.recommendation_engine is None:
-                        st.session_state.recommendation_engine = create_demo_recommendation_engine()
-                    
-                    recommendations = st.session_state.recommendation_engine.get_recommendations(user_profile)
-                    st.session_state.recommendations = recommendations
-                    st.session_state.user_profile = user_profile
-                
-                st.success("✅ Recommendations generated successfully!")
-            else:
-                for error in errors:
-                    st.error(f"❌ {error}")
-        
-        return user_profile
+        # Recommendation mode
+        st.markdown("### ⚙️ Recommendation Mode")
+        use_target_optimization = st.selectbox(
+            "Choose recommendation approach:",
+            ["Target-Optimized (Recommended)", "Standard"],
+            help="Target-Optimized uses advanced algorithms specifically designed for your chosen condition"
+        )
+    
+    # Create user profile dictionary
+    user_profile = {
+        'Age': age,
+        'Hours per day': hours_per_day,
+        'BPM': bpm,
+        'Anxiety': anxiety,
+        'Depression': depression,
+        'Insomnia': insomnia,
+        'OCD': ocd,
+        f'Primary streaming service_{primary_streaming}': True,
+        f'While working_{while_working}': True,
+        f'Instrumentalist_{instrumentalist}': True,
+        f'Composer_{composer}': True,
+        f'Exploratory_{exploratory}': True,
+        f'Foreign languages_{foreign_languages}': True
+    }
+    
+    return user_profile, target_to_improve, use_target_optimization
 
-def display_mental_health_summary(user_profile):
-    """Display user's mental health summary."""
-    st.markdown('<h3 class="sub-header">🧠 Your Mental Health Profile</h3>', unsafe_allow_html=True)
+def display_user_profile(user_profile, target_to_improve):
+    """Display user profile summary."""
+    st.markdown("### 👤 Your Profile Summary")
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Anxiety", f"{user_profile['anxiety_level']}/10", 
-                 help="Current anxiety level")
-    with col2:
-        st.metric("Depression", f"{user_profile['depression_level']}/10",
-                 help="Current depression level")
-    with col3:
-        st.metric("Insomnia", f"{user_profile['insomnia_level']}/10",
-                 help="Current insomnia level")
-    with col4:
-        st.metric("OCD", f"{user_profile['ocd_level']}/10",
-                 help="Current OCD level")
+        st.metric("Age", f"{user_profile['Age']} years")
+        st.metric("Daily Listening", f"{user_profile['Hours per day']} hours")
     
-    # Mental health radar chart
+    with col2:
+        st.metric("Anxiety", f"{user_profile['Anxiety']}/10")
+        st.metric("Depression", f"{user_profile['Depression']}/10")
+    
+    with col3:
+        st.metric("Insomnia", f"{user_profile['Insomnia']}/10")
+        st.metric("OCD", f"{user_profile['OCD']}/10")
+    
+    with col4:
+        st.metric("Preferred BPM", f"{user_profile['BPM']}")
+        st.metric("Focus Area", target_to_improve)
+
+def display_recommendations(recommendations_df, target_to_improve):
+    """Display the target-optimized music recommendations."""
+    if recommendations_df.empty:
+        st.error("❌ No recommendations could be generated. Please try different inputs.")
+        return
+    
+    st.markdown("### 🎵 Your Target-Optimized Music Recommendations")
+    st.markdown(f"**Focus:** Specifically improving {target_to_improve}")
+    
+    # Display top recommendation prominently
+    top_rec = recommendations_df.iloc[0]
+    
+    # Check if we have therapeutic score (target optimized) or standard recommendation
+    if 'Therapeutic_Score' in top_rec:
+        therapeutic_pct = top_rec['Therapeutic_Score'] * 100
+        status_emoji = "🟢" if therapeutic_pct > 5 else "🟡" if therapeutic_pct > 1 else "🔴"
+        status_text = "High" if therapeutic_pct > 5 else "Moderate" if therapeutic_pct > 1 else "Low"
+        
+        st.markdown(f"""
+        <div class="success-box">
+            <h3>{status_emoji} Top Recommendation: {top_rec['Genre']}</h3>
+            <p><strong>{status_text} therapeutic potential for {target_to_improve}</strong></p>
+            <p>Therapeutic Score: <strong>{therapeutic_pct:+.2f}%</strong></p>
+            <p>Specifically optimized for <strong>{target_to_improve} improvement</strong></p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Fallback for standard recommendations
+        st.markdown(f"""
+        <div class="success-box">
+            <h3>🏆 Top Recommendation: {top_rec['Genre']}</h3>
+            <p><strong>{top_rec['Improvement_Percentage']:.1f}% chance to improve your {target_to_improve.lower()}</strong></p>
+            <p>Predicted effect: <strong>{top_rec['Predicted_Effect']}</strong></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Display all recommendations in a table
+    st.markdown("#### 📊 Target-Optimized Recommendations")
+    
+    # Format the dataframe for display
+    display_df = recommendations_df.copy()
+    display_df['Rank'] = range(1, len(display_df) + 1)
+    
+    if 'Therapeutic_Score' in display_df.columns:
+        # Target-optimized display
+        display_df['Therapeutic Score'] = (display_df['Therapeutic_Score'] * 100).round(2).astype(str) + '%'
+        display_df['Improvement %'] = display_df['Improvement_Percentage'].round(1).astype(str) + '%'
+        display_df = display_df[['Rank', 'Genre', 'Therapeutic Score', 'Improvement %', 'Target_Optimized']]
+        display_df.columns = ['Rank', 'Genre', f'{target_to_improve} Therapeutic Score', 'Overall Improvement %', 'Optimized For']
+    else:
+        # Standard display
+        display_df['Improvement %'] = display_df['Improvement_Percentage'].round(1).astype(str) + '%'
+        display_df = display_df[['Rank', 'Genre', 'Improvement %', 'Predicted_Effect']]
+        display_df.columns = ['Rank', 'Genre', 'Improvement Probability', 'Predicted Effect']
+    
+    st.dataframe(display_df, use_container_width=True)
+    
+    # Create visualization
+    if 'Therapeutic_Score' in recommendations_df.columns:
+        fig = px.bar(
+            recommendations_df, 
+            x='Genre', 
+            y=[col for col in ['Therapeutic_Score'] if col in recommendations_df.columns][0],
+            title=f"Target-Optimized Therapeutic Scores for {target_to_improve}",
+            labels={'Therapeutic_Score': f'{target_to_improve} Therapeutic Score', 'Genre': 'Music Genre'},
+            color='Therapeutic_Score',
+            color_continuous_scale='RdYlGn'
+        )
+        # Update y-axis to show percentage
+        fig.update_traces(y=recommendations_df['Therapeutic_Score'] * 100)
+        fig.update_layout(yaxis_title=f"{target_to_improve} Therapeutic Score (%)")
+    else:
+        fig = px.bar(
+            recommendations_df, 
+            x='Genre', 
+            y='Improvement_Percentage',
+            title=f"Music Genre Recommendations for {target_to_improve} Improvement",
+            labels={'Improvement_Percentage': 'Improvement Probability (%)', 'Genre': 'Music Genre'},
+            color='Improvement_Percentage',
+            color_continuous_scale='viridis'
+        )
+    
+    fig.update_layout(height=400, showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+
+def display_genre_explanations(recommendations_df):
+    """Display explanations for recommended genres."""
+    st.markdown("### 💡 Why These Genres?")
+    
+    explanations = {
+        'Classical': "Classical music's structured harmonies and moderate tempo have been scientifically shown to reduce cortisol levels and promote relaxation.",
+        'Jazz': "Jazz music's complex yet soothing harmonies can provide emotional stimulation while maintaining therapeutic benefits.",
+        'Ambient': "Ambient music's minimal structure and gentle soundscapes help reduce mental stimulation, making it ideal for anxiety relief.",
+        'Folk': "Folk music's storytelling nature and acoustic instruments can provide emotional connection and comfort.",
+        'New Age': "New Age music is specifically designed for relaxation and meditation, often incorporating nature sounds and slow tempos.",
+        'World': "World music offers diverse cultural expressions that can provide new perspectives and emotional experiences.",
+        'Alternative': "Alternative music's authentic expression can resonate with complex emotional states and provide cathartic relief.",
+        'Rock': "Certain rock subgenres with moderate tempo can provide energizing effects while maintaining emotional authenticity.",
+        'Pop': "Upbeat pop music can boost mood through familiar melodies and positive energy.",
+        'Hip hop': "Hip hop's rhythmic elements and expressive lyrics can provide emotional outlet and empowerment.",
+        'R&B': "R&B's smooth rhythms and soulful melodies can provide comfort and emotional connection.",
+        'Country': "Country music's storytelling and emotional honesty can provide relatability and comfort.",
+        'EDM': "Electronic dance music's rhythmic patterns can provide energy and mood elevation through movement.",
+        'Latin': "Latin music's vibrant rhythms can promote physical movement and positive energy.",
+        'Metal': "For some individuals, metal music's intensity can provide emotional release and catharsis.",
+        'Lofi': "Lo-fi music's relaxed tempo and ambient qualities make it ideal for focus and anxiety reduction."
+    }
+    
+    for _, row in recommendations_df.iterrows():
+        genre = row['Genre']
+        percentage = row['Improvement_Percentage']
+        
+        explanation = explanations.get(genre, f"{genre} music has shown positive therapeutic effects for mood regulation and stress reduction.")
+        
+        st.markdown(f"""
+        <div class="metric-card">
+            <h4>🎼 {genre} ({percentage:.1f}% improvement chance)</h4>
+            <p>{explanation}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+def display_mental_health_radar(user_profile):
+    """Display a radar chart of mental health indicators."""
+    st.markdown("### 📊 Your Mental Health Profile")
+    
     categories = ['Anxiety', 'Depression', 'Insomnia', 'OCD']
-    values = [user_profile['anxiety_level'], user_profile['depression_level'], 
-             user_profile['insomnia_level'], user_profile['ocd_level']]
+    values = [user_profile[cat] for cat in categories]
     
     fig = go.Figure()
+    
     fig.add_trace(go.Scatterpolar(
         r=values,
         theta=categories,
         fill='toself',
-        name='Current Levels',
-        line_color='rgb(30, 136, 229)'
+        name='Your Profile',
+        line_color='rgb(30, 136, 229)',
+        fillcolor='rgba(30, 136, 229, 0.3)'
     ))
     
     fig.update_layout(
@@ -273,246 +559,85 @@ def display_mental_health_summary(user_profile):
                 range=[0, 10]
             )),
         showlegend=False,
-        title="Mental Health Profile Radar",
+        title="Mental Health Indicators (0-10 scale)",
         height=400
     )
     
     st.plotly_chart(fig, use_container_width=True)
-    
-    # Primary concern
-    primary_concern = user_profile.get('primary_concern', 'general_wellbeing')
-    if 'mild' not in primary_concern and primary_concern != 'general_wellbeing':
-        st.markdown(f"""
-        <div class="warning-box">
-            <strong>🎯 Primary Focus Area:</strong> {primary_concern.title()}<br>
-            Your recommendations will be optimized for this condition.
-        </div>
-        """, unsafe_allow_html=True)
-
-def display_recommendations():
-    """Display the music recommendations."""
-    if st.session_state.recommendations is None:
-        st.info("👈 Complete your profile in the sidebar and click 'Get My Recommendations' to see personalized music suggestions.")
-        return
-    
-    recommendations = st.session_state.recommendations
-    
-    st.markdown('<h3 class="sub-header">🎵 Your Personalized Music Recommendations</h3>', unsafe_allow_html=True)
-    
-    # Overall mood improvement prediction
-    overall_improvement = recommendations['expected_mood_improvement'].get('overall', 0)
-    st.markdown(f"""
-    <div class="success-box">
-        <strong>📈 Expected Mood Improvement:</strong> +{overall_improvement:.1f} points<br>
-        Based on your profile, these recommendations could improve your mood by an average of {overall_improvement:.1f} points on a 7-point scale.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Display genre recommendations
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("#### 🎼 Recommended Genres")
-        
-        genre_recs = recommendations['genre_recommendations']
-        for _, row in genre_recs.iterrows():
-            genre = row['genre']
-            confidence = row['confidence']
-            rank = row['rank']
-            
-            # Get explanation for this genre
-            explanation = recommendations['explanations'].get(genre, "No explanation available.")
-            
-            with st.expander(f"{rank}. {genre} - {confidence:.1%} confidence"):
-                st.write(f"**Why this works for you:** {explanation}")
-                
-                # Expected improvement for this genre
-                genre_improvement = recommendations['expected_mood_improvement'].get(genre, 0)
-                st.metric("Expected Mood Improvement", f"+{genre_improvement:.1f} points")
-    
-    with col2:
-        st.markdown("#### 📊 Confidence Scores")
-        
-        # Create confidence chart
-        genres = [row['genre'] for _, row in genre_recs.iterrows()]
-        confidences = [row['confidence'] for _, row in genre_recs.iterrows()]
-        
-        fig = px.bar(
-            x=confidences,
-            y=genres,
-            orientation='h',
-            title="Recommendation Confidence",
-            labels={'x': 'Confidence Score', 'y': 'Genre'},
-            color=confidences,
-            color_continuous_scale='Blues'
-        )
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Track recommendations
-    st.markdown("#### 🎵 Suggested Tracks")
-    
-    track_recs = recommendations['track_recommendations']
-    for i, track in enumerate(track_recs[:3]):  # Show top 3 tracks
-        col1, col2, col3 = st.columns([3, 2, 1])
-        
-        with col1:
-            st.write(f"**{track['track_name']}**")
-            st.caption(f"by {track['artist']} • {track['genre']}")
-        
-        with col2:
-            st.metric("Confidence", f"{track['confidence']:.1%}")
-        
-        with col3:
-            st.metric("Expected +", f"{track['expected_mood_improvement']:.1f}")
-
-def display_mood_journey():
-    """Display expected mood journey visualization."""
-    if st.session_state.recommendations is None:
-        return
-    
-    st.markdown('<h3 class="sub-header">📈 Your Mood Journey</h3>', unsafe_allow_html=True)
-    
-    user_profile = st.session_state.user_profile
-    recommendations = st.session_state.recommendations
-    
-    current_mood = user_profile['current_mood']
-    expected_improvement = recommendations['expected_mood_improvement']['overall']
-    
-    # Create mood journey timeline
-    time_points = [0, 5, 10, 15, 20, 25, 30]  # minutes
-    mood_progression = [
-        current_mood,
-        current_mood + expected_improvement * 0.2,
-        current_mood + expected_improvement * 0.4,
-        current_mood + expected_improvement * 0.6,
-        current_mood + expected_improvement * 0.8,
-        current_mood + expected_improvement * 0.9,
-        min(7, current_mood + expected_improvement)
-    ]
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=time_points,
-        y=mood_progression,
-        mode='lines+markers',
-        name='Expected Mood',
-        line=dict(color='rgb(76, 175, 80)', width=3),
-        marker=dict(size=8)
-    ))
-    
-    fig.add_hline(y=current_mood, line_dash="dash", line_color="red",
-                  annotation_text="Starting Mood")
-    
-    fig.update_layout(
-        title="Expected Mood Improvement Over 30 Minutes",
-        xaxis_title="Time (minutes)",
-        yaxis_title="Mood Level (1-7)",
-        yaxis=dict(range=[1, 7]),
-        height=400
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Add interpretation
-    improvement_percent = (expected_improvement / 6) * 100  # 6 is max possible improvement (7-1)
-    
-    if improvement_percent > 20:
-        interpretation = "🎉 Excellent! These recommendations show strong potential for mood improvement."
-    elif improvement_percent > 10:
-        interpretation = "✅ Good! These recommendations should provide moderate mood benefits."
-    else:
-        interpretation = "💡 These recommendations may provide gentle mood support."
-    
-    st.info(interpretation)
-
-def display_success_stories():
-    """Display success stories from other users."""
-    st.markdown('<h3 class="sub-header">🌟 Success Stories</h3>', unsafe_allow_html=True)
-    
-    stories = get_success_stories()
-    
-    for story in stories:
-        with st.expander(f"📖 {story['user_type']}"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write("**Profile:**")
-                profile = story['profile']
-                for key, value in profile.items():
-                    if key != 'primary_concern':
-                        st.write(f"• {key.replace('_', ' ').title()}: {value}")
-            
-            with col2:
-                st.write("**Result:**")
-                st.write(f"• **Recommendation:** {story['recommendation']}")
-                st.write(f"• **Outcome:** {story['outcome']}")
-            
-            st.write(f"**User Feedback:** *\"{story['feedback']}\"*")
-
-def display_scientific_background():
-    """Display scientific background information."""
-    with st.expander("🔬 Scientific Background"):
-        st.markdown("""
-        ### How Music Affects Mental Health
-        
-        **🧠 Neurological Impact:**
-        - Music activates the brain's reward system, releasing dopamine
-        - Slow tempos (60-80 BPM) can synchronize with heart rate, promoting relaxation
-        - Complex harmonies stimulate cognitive processing and emotional regulation
-        
-        **📊 Research-Based Approach:**
-        - Our recommendations are based on analysis of 10,000+ listening sessions
-        - Machine learning models identify patterns between music features and mood outcomes
-        - Personalization considers individual mental health profiles and preferences
-        
-        **🎵 Music Feature Science:**
-        - **Tempo:** Lower tempos reduce anxiety; moderate tempos enhance focus
-        - **Valence:** Musical positivity affects emotional state
-        - **Energy:** High energy can boost mood; low energy promotes relaxation
-        - **Acousticness:** Natural sounds reduce stress hormones
-        
-        **⚠️ Important Note:**
-        This tool provides music recommendations for wellness support and is not a substitute 
-        for professional mental health treatment. If you're experiencing severe symptoms, 
-        please consult with a healthcare provider.
-        """)
 
 def main():
     """Main application function."""
-    initialize_session_state()
+    # Load model artifacts
+    model_artifacts = load_model_artifacts()
     
     # Display header
     display_header()
     
-    # User input sidebar
-    user_profile = user_input_sidebar()
+    # Check if model loaded successfully
+    if not model_artifacts['loaded']:
+        st.markdown("""
+        <div class="warning-box">
+            <strong>⚠️ Model Not Available</strong><br>
+            The trained machine learning model could not be loaded. 
+            Please ensure you have run the modeling notebook and the model files exist in the /models/ directory.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # Get user input
+    user_profile, target_to_improve, use_target_optimization = get_user_input()
     
     # Main content area
-    if st.session_state.user_profile is not None:
-        # Display user's mental health summary
-        display_mental_health_summary(st.session_state.user_profile)
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Display user profile
+        display_user_profile(user_profile, target_to_improve)
         
-        # Display recommendations
-        display_recommendations()
+        # Get recommendations button
+        optimization_mode = use_target_optimization == "Target-Optimized (Recommended)"
+        button_text = f"🎵 Get My {'Target-Optimized' if optimization_mode else 'Standard'} Recommendations"
         
-        # Display mood journey
-        display_mood_journey()
+        if st.button(button_text, type="primary", use_container_width=True):
+            with st.spinner(f"🤖 {'Target-optimizing' if optimization_mode else 'Analyzing'} your profile and generating recommendations..."):
+                recommendations = recommend_music_genres(
+                    user_profile, 
+                    target_to_improve, 
+                    model_artifacts, 
+                    top_n=5,
+                    use_target_optimization=optimization_mode
+                )
+                
+                if not recommendations.empty:
+                    display_recommendations(recommendations, target_to_improve)
+                    display_genre_explanations(recommendations)
+                else:
+                    st.error("Unable to generate recommendations. Please check your inputs.")
     
-    # Success stories
-    display_success_stories()
-    
-    # Scientific background
-    display_scientific_background()
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #666;">
-        <p>🎵 Music Wellbeing Recommender | Built with ❤️ for better mental health</p>
-        <p><em>Remember: Music is a powerful tool for wellbeing, but professional help is always available when you need it.</em></p>
-    </div>
-    """, unsafe_allow_html=True)
+    with col2:
+        # Display mental health radar chart
+        display_mental_health_radar(user_profile)
+        
+        # Model information
+        st.markdown("""
+        <div class="info-box">
+            <h4>🤖 About Our AI System</h4>
+            <p><strong>Core Model:</strong> Random Forest Classifier</p>
+            <p><strong>Optimization:</strong> Target-specific therapeutic scoring</p>
+            <p><strong>Features:</strong> 200+ user characteristics</p>
+            <p><strong>Training Data:</strong> MXMH Survey (736 responses)</p>
+            <p><strong>Innovation:</strong> Simulates improvement scenarios for personalized recommendations</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Disclaimer
+        st.markdown("""
+        <div class="warning-box">
+            <h4>⚠️ Important Disclaimer</h4>
+            <p>This tool provides music recommendations based on data patterns and should not replace professional mental health treatment. 
+            If you're experiencing severe mental health symptoms, please consult with a healthcare professional.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
