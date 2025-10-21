@@ -214,16 +214,13 @@ pytest tests/ --cov=src/
 - [ ] Advanced deep learning models (Neural Collaborative Filtering)
 - [ ] Multi-modal data incorporation (text, audio, biometric)
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 👨‍💻 Author
 
 **Your Name**
-- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/yourprofile)
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+- LinkedIn: [Your LinkedIn Profile](https://www.linkedin.com/in/yosr-drira-0b8648248/)
+- GitHub: [@yourusername](https://github.com/DriraYosr)
+- Email: yosr.drira@imt-atlantique.net
 
 ---
 
