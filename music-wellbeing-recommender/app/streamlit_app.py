@@ -74,9 +74,18 @@ st.markdown("""
 def load_model_artifacts():
     """Load the trained model and related artifacts."""
     try:
-        model_path = os.path.join(os.path.dirname(__file__), '../models/music_effect_model.pkl')
-        encoder_path = os.path.join(os.path.dirname(__file__), '../models/label_encoder.pkl')
-        features_path = os.path.join(os.path.dirname(__file__), '../models/feature_columns.pkl')
+        # Get the absolute path to models directory
+        # Works both locally and on Streamlit Cloud
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)  # Go up from app/ to music-wellbeing-recommender/
+        models_dir = os.path.join(project_root, 'models')
+        
+        model_path = os.path.join(models_dir, 'music_effect_model.pkl')
+        encoder_path = os.path.join(models_dir, 'label_encoder.pkl')
+        features_path = os.path.join(models_dir, 'feature_columns.pkl')
+        
+        # Debug: show paths being used
+        st.sidebar.info(f"Loading models from: {models_dir}")
         
         model = joblib.load(model_path)
         label_encoder = joblib.load(encoder_path)
@@ -90,6 +99,8 @@ def load_model_artifacts():
         }
     except Exception as e:
         st.error(f"❌ Error loading model: {e}")
+        st.error(f"Current directory: {os.path.dirname(os.path.abspath(__file__))}")
+        st.error(f"Looking for models in: {os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models')}")
         return {'loaded': False}
 
 def recommend_music_genres(
