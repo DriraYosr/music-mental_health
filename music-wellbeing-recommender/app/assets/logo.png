@@ -1,0 +1,44 @@
+# Music Wellbeing Recommender Logo Placeholder
+
+This file serves as a placeholder for the project logo. 
+
+## Logo Specifications
+
+**Recommended Logo Properties:**
+- Format: PNG with transparent background
+- Size: 512x512 pixels (square)
+- Style: Modern, clean design incorporating music and health elements
+- Colors: Blues (#1E88E5) and greens (#4CAF50) for trust and wellness
+- Elements: Musical note, brain/heart symbol, or headphones
+
+## Creating the Logo
+
+To replace this placeholder:
+
+1. **Design Elements to Include:**
+   - Musical symbols (notes, headphones, waveforms)
+   - Mental health symbols (brain, heart, peaceful imagery)
+   - Clean, professional typography
+   - Calming color palette
+
+2. **Tools for Creation:**
+   - Canva (easy, template-based)
+   - Adobe Illustrator (professional)
+   - Figma (collaborative design)
+   - GIMP (free alternative)
+
+3. **File Naming:**
+   - Replace this file with: `logo.png`
+   - Optional variants: `logo_light.png`, `logo_dark.png`
+
+## Usage
+
+The logo will be used in:
+- Streamlit web application header
+- README.md file
+- Project presentations
+- Documentation materials
+
+---
+
+*This is a placeholder file. Replace with actual logo image when available.*

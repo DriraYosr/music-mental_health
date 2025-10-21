@@ -1,0 +1,144 @@
+# Music Wellbeing Recommender - Presentation Slides
+
+This file serves as a placeholder for the project presentation slides.
+
+## Presentation Structure
+
+### Slide Deck Outline (15-20 slides)
+
+**1. Title Slide**
+- Project name and tagline
+- Your name and contact information
+- Date and context (e.g., "Data Science Portfolio Project")
+
+**2. Problem Statement**
+- Mental health challenges in modern society
+- Limited personalized solutions for music therapy
+- Gap between music preferences and therapeutic benefits
+
+**3. Solution Overview**
+- AI-powered music recommendation system
+- Personalized approach based on mental health indicators
+- Evidence-based recommendations for wellbeing
+
+**4. Market Opportunity**
+- Mental health awareness growing globally
+- Music streaming industry statistics
+- Digital therapy market size and growth
+
+**5. Dataset Overview**
+- 10,000+ listening sessions analyzed
+- User demographics and mental health indicators
+- Music features and mood improvement outcomes
+
+**6. Technical Architecture**
+- Data preprocessing pipeline
+- Machine learning models (mood prediction, genre classification)
+- Web application interface
+- Real-time recommendation engine
+
+**7. Key Features**
+- Personalized genre recommendations
+- Mood improvement predictions
+- Scientific explanations for recommendations
+- Interactive user interface
+
+**8. Model Performance**
+- Accuracy metrics and validation results
+- Cross-validation scores
+- Feature importance analysis
+- User satisfaction rates
+
+**9. Demo Screenshots**
+- User input interface
+- Recommendation results
+- Mood journey visualization
+- Scientific explanations
+
+**10. Key Insights**
+- Tempo-mood correlations
+- Genre effectiveness for different conditions
+- Personalization impact on outcomes
+- Time-of-day listening patterns
+
+**11. Business Impact**
+- Potential applications in healthcare
+- Integration with music streaming platforms
+- Wellness app partnerships
+- Therapeutic practice enhancement
+
+**12. Technical Skills Demonstrated**
+- Data science and machine learning
+- Full-stack development
+- Statistical analysis and visualization
+- Product development lifecycle
+
+**13. Criteo Relevance**
+- Personalization algorithms
+- Real-time recommendation systems
+- A/B testing frameworks
+- User behavior analysis
+
+**14. Future Enhancements**
+- Deep learning models
+- Real-time biometric integration
+- Social features and community
+- Multi-modal data sources
+
+**15. Thank You & Questions**
+- Contact information
+- GitHub repository link
+- Demo availability
+
+## Creation Tools
+
+**Recommended Platforms:**
+- **Google Slides**: Easy collaboration and sharing
+- **PowerPoint**: Professional features and templates
+- **Canva**: Beautiful design templates
+- **Figma**: Custom design and prototyping
+- **Prezi**: Interactive presentations
+
+## Design Guidelines
+
+**Visual Style:**
+- Clean, professional layout
+- Consistent color scheme (blues and greens)
+- High-quality charts and visualizations
+- Minimal text per slide
+- Strong visual hierarchy
+
+**Content Tips:**
+- Tell a story from problem to solution
+- Use real data and metrics
+- Include interactive elements
+- Show, don't just tell
+- Practice the 10-20-30 rule
+
+## File Specifications
+
+When creating the actual presentation:
+- Format: PDF (for sharing) + original format
+- Naming: `presentation_slides.pdf`
+- Size: Standard 16:9 aspect ratio
+- Export quality: High resolution for printing
+
+## Presentation Delivery
+
+**For Criteo Data Science Interview:**
+- Duration: 10-15 minutes + 5 minutes Q&A
+- Focus on technical depth and business impact
+- Emphasize personalization and recommendation aspects
+- Show live demo if possible
+- Prepare for technical questions
+
+**Key Messages:**
+1. Strong technical skills in ML and data science
+2. Understanding of personalization algorithms
+3. Ability to build end-to-end solutions
+4. Focus on user experience and business value
+5. Passion for applying AI to meaningful problems
+
+---
+
+*This is a placeholder file. Replace with actual presentation slides when ready.*
