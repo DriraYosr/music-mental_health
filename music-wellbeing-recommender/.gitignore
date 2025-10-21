@@ -136,18 +136,18 @@ dmypy.json
 *.xls
 *.h5
 *.hdf5
-*.pkl
-*.pickle
-*.joblib
+
+# Pickle files (but allow model files in models/ directory)
+# *.pkl
+# *.pickle
+# *.joblib
 
 # Except for specific data files we want to keep
 !data/raw/music_listening_data.csv
 !data/external/sample_*.csv
 
-# Model files
-*.model
-*.sav
-models/
+# Model files - Allow trained models for deployment
+# models/  ← Commented out to allow model deployment
 checkpoints/
 
 # Large files
