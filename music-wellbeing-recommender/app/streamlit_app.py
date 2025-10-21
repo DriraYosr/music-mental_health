@@ -100,7 +100,32 @@ def load_model_artifacts():
     except Exception as e:
         st.error(f"❌ Error loading model: {e}")
         st.error(f"Current directory: {os.path.dirname(os.path.abspath(__file__))}")
-        st.error(f"Looking for models in: {os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models')}")
+        
+        # Debug: Check if models directory exists and list contents
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        models_dir_check = os.path.join(project_root, 'models')
+        st.error(f"Looking for models in: {models_dir_check}")
+        
+        if os.path.exists(models_dir_check):
+            st.warning(f"⚠️ Models directory EXISTS but failed to load files. Contents:")
+            try:
+                files = os.listdir(models_dir_check)
+                for f in files:
+                    file_path = os.path.join(models_dir_check, f)
+                    size = os.path.getsize(file_path) if os.path.isfile(file_path) else "N/A"
+                    st.text(f"  • {f} ({size} bytes)")
+            except Exception as list_err:
+                st.error(f"Error listing directory: {list_err}")
+        else:
+            st.error(f"❌ Models directory does NOT exist at: {models_dir_check}")
+            st.info("Available directories in project root:")
+            try:
+                items = os.listdir(project_root)
+                for item in items:
+                    st.text(f"  • {item}")
+            except:
+                pass
+        
         return {'loaded': False}
 
 def recommend_music_genres(
